@@ -1,0 +1,9 @@
+torch >= 2.0.1
+einops
+numpy
+pytest
+omegaconf
+tiktoken
+tqdm
+datasets
+wandb
