@@ -39,7 +39,9 @@ def random_batch_sampler(
     """
 
     while True:
-        yield ...
+        index=torch.randint(0,len(tokens)-seq_len+1,(batch_size,))
+        seqs=[tokens[idx:idx+seq_len] for idx in index]
+        yield torch.stack(seqs).to(device)
 
 
 def sequential_batch_sampler(
@@ -64,8 +66,13 @@ def sequential_batch_sampler(
         the last batch.
     """
 
-    for batch in ...:
-        yield ...
+    for batch in batch_size:
+        start=batch*seq_len
+        if seq_len*(batch-1)>tokens.shape[0]:
+            yield None
+        yield tokens[start:start+seq_len]
+        
+        
 
 
 def cosine_lr_schedule(
@@ -90,11 +97,11 @@ def cosine_lr_schedule(
         assert num_training_steps >= num_warmup_steps >= 0
 
         if t < num_warmup_steps:
-            lr = ...
+            lr = math.sin(t/num_warmup_steps*math.pi/2)*max_lr
         elif t < num_training_steps:
-            lr = ...
+            lr = math.cos((t-num_warmup_steps)/(num_training_steps-num_warmup_steps)*math.pi/2)*(max_lr-min_lr)+min_lr
         else:  # t >= num_training_steps
-            lr = ...
+            lr = min_lr
         return lr
 
     return get_lr
