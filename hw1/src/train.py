@@ -66,12 +66,14 @@ def sequential_batch_sampler(
         the last batch.
     """
 
-    for batch in batch_size:
-        start=batch*seq_len
-        if seq_len*(batch-1)>tokens.shape[0]:
-            yield None
-        yield tokens[start:start+seq_len]
-        
+    num_tokens = tokens.size(0)
+    num_batches = num_tokens // (batch_size * seq_len)
+
+    for i in range(num_batches):
+        start = i * batch_size * seq_len
+        end = start + batch_size * seq_len
+        batch = tokens[start:end].view(batch_size, seq_len)
+        yield batch.to(device)
         
 
 
@@ -97,9 +99,9 @@ def cosine_lr_schedule(
         assert num_training_steps >= num_warmup_steps >= 0
 
         if t < num_warmup_steps:
-            lr = math.sin(t/num_warmup_steps*math.pi/2)*max_lr
+            lr = t/num_warmup_steps*max_lr
         elif t < num_training_steps:
-            lr = math.cos((t-num_warmup_steps)/(num_training_steps-num_warmup_steps)*math.pi/2)*(max_lr-min_lr)+min_lr
+            lr = math.cos((t-num_warmup_steps)/(num_training_steps-num_warmup_steps)*math.pi)*(max_lr-min_lr)/2+(max_lr+min_lr)/2
         else:  # t >= num_training_steps
             lr = min_lr
         return lr
