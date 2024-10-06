@@ -25,7 +25,7 @@ def softmax_with_temperature(
     # to avoid division by 0
     temperature = max(temperature, 1e-5)
 
-    return ...
+    return torch.nn.Softmax(-1)(logits/temperature)
 
 
 @torch.inference_mode()
@@ -58,11 +58,47 @@ def generate(
         padding tokens, and 1.0 everywhere else.
     """
 
-    generations = ...
+    model=model.to(device)
+    
+    generations=[]
+    for i in range(0,len(prefixes),batch_size):
+        batch_prefix=prefixes[i:i+batch_size]
+        
+        tokenized=[tokenizer.encode(pre) for pre in batch_prefix]
+        max_len=max(len(t) for t in tokenized)
+        input_ids = [
+            [tokenizer.eot_token] * (max_len - len(t)) + t for t in tokenized
+        ]
+        attention_mask = [
+            [0.0] * (max_len - len(t)) + [1.0] * len(t) for t in tokenized
+        ]
+        # print(input_ids)
+        input_ids = torch.tensor(input_ids, device=device)
+        attention_mask = torch.tensor(attention_mask, device=device)
+
+        with torch.no_grad():
+            for _ in trange(max_new_tokens):
+                logits = model.embed(input_ids, attention_mask)
+                logits = model.token_logits(logits)
+                # print(logits.shape)
+                logits = softmax_with_temperature(logits[:,-1,:],temperature)
+                
+                next_token = torch.multinomial(logits, num_samples=1)
+
+                input_ids = torch.cat([input_ids, next_token], dim=1)
+                attention_mask = torch.cat(
+                    [attention_mask, torch.ones((batch_size, 1), device=device)], dim=1
+                )
+
+        for tokens in input_ids[:, max_len:]:
+            generations.append(tokenizer.decode(tokens.tolist()))
+
+    
     return generations
 
 
 def main():
+    torch.cuda.empty_cache()
     enable_tf32()
 
     parser = argparse.ArgumentParser()
@@ -110,7 +146,8 @@ def main():
         device,
         tokenizer,
         prefixes,
-        config.batch_size,
+        # config.batch_size,
+        1,
         max_new_tokens,
         temperature,
     )
@@ -127,3 +164,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# python src/generate.py --config=outputs/GPT-tiny/config.yaml --prefixes=data/prefixes.jsonl --temperature=2

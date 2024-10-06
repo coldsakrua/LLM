@@ -169,7 +169,7 @@ class MultiHeadAttention(nn.Module):
         attn_weights = soft(attn_logits)
         attn_weights = self.dropout(attn_weights)
         attn = torch.matmul(attn_weights,v)
-        attn = attn.permute(0,2,1,3).reshape(b,s,-1)
+        attn = attn.permute(0,2,1,3).reshape(b,s,-1).to(q.device)
         # print(attn_logits)
         
         return attn
@@ -357,15 +357,14 @@ class DecoderLM(nn.Module):
         """
 
         assert input_ids.shape[1] <= self.n_positions
-        token_embeddings = self.token_embeddings(input_ids) # B*S->B*S*D
+        token_embeddings = self.token_embeddings(input_ids).to(input_ids.device) # B*S->B*S*D
         if attention_mask is None:
             position_ids=torch.cumsum(torch.ones(size=input_ids.shape),dim=-1)-torch.ones(size=input_ids.shape)
         else:    
-            position_ids=torch.cumsum(attention_mask,dim=-1)-torch.ones(size=attention_mask.shape)
-        position_ids=position_ids.int()
-        positional_embeddings=self.position_embeddings(position_ids)
-        # print(positional_embeddings)
-        # print(token_embeddings)
+            position_ids=torch.cumsum(attention_mask,dim=-1)-torch.ones(size=attention_mask.shape).to(attention_mask.device)
+        position_ids=position_ids.int().to(input_ids.device)
+        positional_embeddings=self.position_embeddings(position_ids).to(input_ids.device)
+
         return self.dropout(token_embeddings + positional_embeddings)
 
     def token_logits(self, x: torch.FloatTensor) -> torch.FloatTensor:
@@ -380,7 +379,7 @@ class DecoderLM(nn.Module):
         Hint: Token embeddings can be used.
         """
 
-        logits = torch.matmul(x, self.token_embeddings.weight.T)
+        logits = torch.matmul(x, self.token_embeddings.weight.T).to(x.device)
         return logits
 
     def forward(
@@ -404,7 +403,7 @@ class DecoderLM(nn.Module):
             x=block(x,attention_mask)
         x=self.ln(x)
         logits = self.token_logits(x)
-        return logits
+        return logits.to(input_ids.device)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):

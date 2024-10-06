@@ -128,10 +128,12 @@ def compute_language_modeling_loss(
 
     Hint: Think about what are the groundtruth labels for next token prediction.
     """
-
+    
     labels = input_ids[:,1:]
     logits = logits[:,:-1,:]
-    loss =  F.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
+
+    loss =  F.cross_entropy(logits.reshape(-1, logits.size(-1)), labels.reshape(-1))
+
     return loss
 
 
