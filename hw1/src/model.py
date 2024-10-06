@@ -52,9 +52,9 @@ class MultiHeadAttention(nn.Module):
         # q = ...
         # kT = ...
         # v = ...
-        q=self.q_attn(x).view(B,S,self.n_head,HD)
-        kT=self.k_attn(x).view(B,S,self.n_head,HD).transpose(-1,-2)
-        v=self.v_attn(x).view(B,S,self.n_head,HD)
+        q=self.q_attn(x).view(B,self.n_head,S,HD)
+        kT=self.k_attn(x).view(B,self.n_head,HD,S)
+        v=self.v_attn(x).view(B,self.n_head,S,HD)
 
         return q, kT, v
 
@@ -106,8 +106,8 @@ class MultiHeadAttention(nn.Module):
 
         Hint: torch.triu or torch.tril
         """
-        s=q.shape[2]
-        causal_mask = torch.tril(torch.ones(size=(s,s))).dtype(torch.bool).to(q.device)
+        b,h,s,hd=q.shape
+        causal_mask = torch.tril(torch.ones(size=(s,s))).type(torch.bool).to(q.device)
 
         """
         Sometimes, we want to pad the input sequences so that they have the same
@@ -146,28 +146,32 @@ class MultiHeadAttention(nn.Module):
         Note that `mask` needs to be on the same device as the input tensors
         q, kT and v.
         """
-
+        casual_mask=causal_mask.unsqueeze(0).unsqueeze(0).repeat(b,1,1,1)
         if attention_mask is None:
-            mask = causal_mask
+            mask = casual_mask
         else:
-            tmp_attn=torch.sum(attention_mask,dim=1,dtype=torch.uint8)
-            mask=torch.zeros(size=(attention_mask.shape[0],1,s,s),dtype=torch.bool)
-            for b in range(attention_mask.shape[0]):
-                mask[b,0,s-tmp_attn[b]:,s-tmp_attn[b]:]=torch.tril(torch.ones(size=(tmp_attn[b],tmp_attn[b])))
-            mask=mask.to(q.device)
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2).expand(b,1,s,s)  # (B, 1, 1, S)
+            mask = causal_mask & (attention_mask > 0)  # Combine masks
+            # tmp_attn=torch.sum(attention_mask,dim=1,dtype=torch.uint8)
+            # mask=torch.zeros(size=(attention_mask.shape[0],1,s,s),dtype=torch.bool)
+            # for b in range(attention_mask.shape[0]):
+            #     mask[b,0,s-tmp_attn[b]:,s-tmp_attn[b]:]=torch.tril(torch.ones(size=(tmp_attn[b],tmp_attn[b])))
+        mask=mask.to(q.device)
         """
         Fill unmasked_attn_logits with float_min wherever causal mask has value False.
 
         Hint: torch.masked_fill
         """
         float_min = torch.finfo(q.dtype).min
+        mask=~mask
         attn_logits = unmasked_attn_logits.masked_fill(mask,value=float_min)
-        attn_weights = nn.Softmax(attn_logits,dim=-1)
+        soft = nn.Softmax(dim=-1)
+        attn_weights = soft(attn_logits)
         attn_weights = self.dropout(attn_weights)
-
-        # scale value by the attention weights.
         attn = torch.matmul(attn_weights,v)
-
+        attn = attn.permute(0,2,1,3).reshape(b,s,-1)
+        # print(attn_logits)
+        
         return attn
 
     def projection(self, attn: torch.FloatTensor) -> torch.FloatTensor:
@@ -185,13 +189,10 @@ class MultiHeadAttention(nn.Module):
         Returns:
             y: outputs (B x S x D) of the multi-head attention module
         """
-        b,s,d=x.shape
+
         q,kT,v=self.q_kT_v(x)
         attn=self.self_attention(q,kT,v,attention_mask)
-        
-        
-        y = attn.transpose(1,2).contiguous().view(b,s,d)
-        y=self.proj(y)
+        y=self.projection(attn)
         return y
 
 
@@ -357,8 +358,14 @@ class DecoderLM(nn.Module):
 
         assert input_ids.shape[1] <= self.n_positions
         token_embeddings = self.token_embeddings(input_ids) # B*S->B*S*D
-        position_ids=torch.cumsum(attention_mask,dim=-1)
+        if attention_mask is None:
+            position_ids=torch.cumsum(torch.ones(size=input_ids.shape),dim=-1)-torch.ones(size=input_ids.shape)
+        else:    
+            position_ids=torch.cumsum(attention_mask,dim=-1)-torch.ones(size=attention_mask.shape)
+        position_ids=position_ids.int()
         positional_embeddings=self.position_embeddings(position_ids)
+        # print(positional_embeddings)
+        # print(token_embeddings)
         return self.dropout(token_embeddings + positional_embeddings)
 
     def token_logits(self, x: torch.FloatTensor) -> torch.FloatTensor:
@@ -373,8 +380,8 @@ class DecoderLM(nn.Module):
         Hint: Token embeddings can be used.
         """
 
-        logits = self.token_embeddings.parameters()@x.transpose(1,2)
-        return logits.transpose(1,2)
+        logits = torch.matmul(x, self.token_embeddings.weight.T)
+        return logits
 
     def forward(
         self,
