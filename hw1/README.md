@@ -68,7 +68,7 @@ z = torch.permute(x, (0, 2, 1))
 5. compute_language_modeling_loss - 训练和评估时使用的损失函数
 
 ### 余弦退火
-带热身的余弦退火是一种模型训练中使用的动态学习率策略。它包含两个阶段，在热身阶段，$t \in [0, num\_warmup\_steps)$，学习率从0线性增长到$lr_{max}$（在$t=num\_warmup\_step$时达到$lr_{max}$）；在退火阶段，$t \in [num\_warmup\_steps, num\_training\_steps)$，学习率从$lr_{max}$衰减到$lr_{min}$，衰减过程遵循半余弦曲线（在$t=num\_training\_step$时达到$lr_{min}$）。当$t \geq num\_training\_steps$，学习率保持在$lr_{min}$。
+带热身的余弦退火是一种模型训练中使用的动态学习率策略。它包含两个阶段，在热身阶段，$t \in [0, a)$，学习率从0线性增长到$lr_{max}$；在退火阶段，$t \in [a, b)$，学习率从$lr_{max}$衰减到$lr_{min}$，衰减过程遵循半余弦曲线。当$t \geq b$，学习率保持在$lr_{min}$。
 
 
 ### 配置文件
@@ -97,7 +97,7 @@ max_lr: 5e-4                  # <- maximum learning rate in cosine annealing
 
 在实现 `src/model.py` 和 `src/train.py` 之后且通过pytest校验之后，你还需要自己训练一个模型。作为样例，你可以运行 `python src/train.py configs/GPT-tiny.yaml` 来训练一个小模型（～2M参数）。
 
-你可以创建新的配置文件来配置其他超参数，训练你的最终模型。最终提交的模型validation perplexity (PPL)不超过50即可得到满分。鼓励大家探索PPL更低的配置，但不要超过分配的机时。
+你可以创建新的配置文件来配置其他超参数，训练你的最终模型。最终提交的模型validation perplexity (PPL)不超过100即可得到满分。鼓励大家探索PPL更低的配置，但不要超过分配的机时。
 
 ## Step 3. 文本生成
 `src/generate.py` 提供了文本生成的主要代码。为了生成文本，需要为LLM提供prompt，在data/prefixs.json中提供了prompt输入。需要实现的函数有两个：
@@ -107,15 +107,11 @@ max_lr: 5e-4                  # <- maximum learning rate in cosine annealing
 
 在实现的函数通过pytest测试之后，你需要使用在Step 2中训练的模型对data/prefixs.json中的输入生成文本。你可以探索不同的temperature值对生成结果的影响。这个步骤不需要达到任何分数要求，你只需要给一个你生成的结果即可:)
 
-### Tokenizer
-
-在文本生成任务中，输入和期望的输出都是文本字符串。在模型的推理过程中，输入和输出的token都用一个ID表示。Tokenizer实现单词字符串和token ID间的相互转换。在Lab中使用tiktoken库得到tokenizer，可调用encode/decode函数实现文本和ID的转换。具体用例可参考[这个](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken)。
-
 ## 最终提交
 
 你需要提交源代码(`src/model.py`, `src/train.py`, `src/generate.py`)，用于训练的超参数配置文件(config.yaml)，训练得到的模型参数(model.pt)，校验结果文件(eval.json)，文本生成结果(generation.jsonl)。
 
-评分标准为：pytest中的每个case 1分；训练模型的校验结果的给分公式$6 * min(1, max(0, (1000-PPL)/950))$；文本生成结果给出即可得到3分。满分一共20分。
+评分标准为：pytest中的每个case 1分；训练模型的校验结果达到100/150/200以下分别能拿到3/2/1分；文本生成结果给出即可得到2分。满分一共16分。
 
 ## Acknowledgement
 
@@ -125,7 +121,7 @@ Lab代码基本来自CMU LLM课程的[HW2](https://2023.cmu-llms.org/homework2/)
 
 This code contains modifications from [nanoGPT](https://github.com/karpathy/nanoGPT)
 ([license](copyright/nanoGPT)) and [PyTorch](https://pytorch.org/)
-([license](copyright/pytorch)).
+([license](copyright/pytorch)
 
 
 

@@ -52,9 +52,9 @@ class MultiHeadAttention(nn.Module):
         # q = ...
         # kT = ...
         # v = ...
-        q=self.q_attn(x).view(B,self.n_head,S,HD)
-        kT=self.k_attn(x).view(B,self.n_head,HD,S)
-        v=self.v_attn(x).view(B,self.n_head,S,HD)
+        q=self.q_attn(x).view(B,S,self.n_head,-1).transpose(1,2)
+        kT=self.k_attn(x).view(B,S,self.n_head,-1).transpose(1,2).transpose(2,3)
+        v=self.v_attn(x).view(B,S,self.n_head,-1).transpose(1,2)
 
         return q, kT, v
 
